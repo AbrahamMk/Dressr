@@ -1,0 +1,51 @@
+@import url('https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        /* Layout */
+        --sidebar-width: 16rem;
+        --sidebar-collapsed-width: 4.5rem;
+        --header-height: 3.75rem;
+
+        /* Radius & elevation */
+        --radius-control: 0.5rem;
+        --radius-card: 0.75rem;
+        --shadow-card:
+            0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.08);
+        --shadow-overlay: 0 24px 48px -24px rgb(15 23 42 / 0.35);
+
+        color-scheme: light;
+    }
+
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-canvas text-sm leading-normal text-text antialiased;
+    }
+
+    * {
+        @apply border-border;
+    }
+
+    :focus-visible {
+        outline: 2px solid rgb(37 99 235);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
