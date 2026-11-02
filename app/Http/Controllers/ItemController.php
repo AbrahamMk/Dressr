@@ -7,11 +7,16 @@ use App\Enums\ItemFitType;
 use App\Enums\ItemPattern;
 use App\Enums\ItemStretch;
 use App\Enums\Season;
+use App\Http\Requests\AnalyzeItemPhotoRequest;
 use App\Http\Requests\StoreItemRequest;
 use App\Http\Requests\UpdateItemRequest;
 use App\Models\Item;
+use App\Models\WearLogItem;
+use App\Services\Fit\FitService;
+use App\Services\Item\AnalyzePhotoService;
 use App\Services\PhotoService;
 use App\Support\Color;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -21,7 +26,11 @@ use Inertia\Response;
 
 class ItemController extends Controller
 {
-    public function __construct(private readonly PhotoService $photos) {}
+    public function __construct(
+        private readonly PhotoService $photos,
+        private readonly FitService $fit,
+        private readonly AnalyzePhotoService $analyzer,
+    ) {}
 
     /**
      * Show the wardrobe with the active filters applied.
@@ -42,6 +51,19 @@ class ItemController extends Controller
             'search' => $validated['search'] ?? null,
         ];
 
+        $measurement = $request->user()->currentMeasurement();
+
+        $lookback = (int) config('stylist.scoring.variety.lookback_days', 14);
+        $recentlyWorn = WearLogItem::query()
+            ->whereHas('wearLog', function ($query) use ($request, $lookback) {
+                $query->where('user_id', $request->user()->id)
+                    ->whereDate('worn_on', '>=', now()->subDays($lookback)->toDateString());
+            })
+            ->join('wear_logs', 'wear_logs.id', '=', 'wear_log_items.wear_log_id')
+            ->selectRaw('wear_log_items.item_id, max(wear_logs.worn_on) as last_worn_on')
+            ->groupBy('wear_log_items.item_id')
+            ->pluck('last_worn_on', 'item_id');
+
         $items = $request->user()->items()
             ->when($filters['category'], fn ($query, $value) => $query->where('category', $value))
             ->when($filters['season'], fn ($query, $value) => $query->whereJsonContains('seasons', $value))
@@ -53,7 +75,13 @@ class ItemController extends Controller
             }))
             ->latest('id')
             ->paginate(24)
-            ->withQueryString();
+            ->withQueryString()
+            ->through(function (Item $item) use ($measurement, $recentlyWorn) {
+                $item->setAttribute('fit', $this->fit->evaluate($measurement, $item)->toArray());
+                $item->setAttribute('last_worn_on', $recentlyWorn[$item->id] ?? null);
+
+                return $item;
+            });
 
         return Inertia::render('Wardrobe/Index', [
             'items' => $items,
@@ -74,7 +102,21 @@ class ItemController extends Controller
         return Inertia::render('Wardrobe/Form', [
             'item' => null,
             'options' => $this->formOptions(),
+            'aiConfigured' => $this->analyzer->isConfigured(),
         ]);
+    }
+
+    /**
+     * Suggest wardrobe fields from a photo (AI when configured, else local colour).
+     */
+    public function analyze(AnalyzeItemPhotoRequest $request): JsonResponse
+    {
+        $result = $this->analyzer->analyze(
+            $request->file('photo'),
+            $request->user()->id,
+        );
+
+        return response()->json($result);
     }
 
     /**
@@ -105,9 +147,13 @@ class ItemController extends Controller
     {
         $this->authorize('update', $item);
 
+        $measurement = request()->user()->currentMeasurement();
+        $item->setAttribute('fit', $this->fit->evaluate($measurement, $item)->toArray());
+
         return Inertia::render('Wardrobe/Form', [
             'item' => $item,
             'options' => $this->formOptions(),
+            'aiConfigured' => $this->analyzer->isConfigured(),
         ]);
     }
 

@@ -73,4 +73,21 @@ class User extends Authenticatable
     {
         return $this->hasMany(Item::class);
     }
+
+    /**
+     * Saved outfits owned by the user.
+     */
+    public function outfits(): HasMany
+    {
+        return $this->hasMany(Outfit::class);
+    }
+
+    /**
+     * Wear log entries owned by the user.
+     */
+    public function wearLogs(): HasMany
+    {
+        return $this->hasMany(WearLog::class);
+    }
 }
+

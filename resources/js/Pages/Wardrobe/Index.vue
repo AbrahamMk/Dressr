@@ -43,6 +43,23 @@ const label = (value) =>
         .replaceAll('_', ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const fitVariant = (fitLabel) =>
+    ({
+        good_fit: 'success',
+        acceptable: 'info',
+        tight: 'warning',
+        loose: 'warning',
+        unknown: 'neutral',
+    })[fitLabel] ?? 'neutral';
+
+const fitText = (fit) => {
+    if (!fit || fit.label === 'unknown') {
+        return 'Add garment measurements for a precise fit';
+    }
+
+    return label(fit.label);
+};
+
 const apply = () => {
     const params = Object.fromEntries(
         Object.entries(filters).filter(([, value]) => value !== ''),
@@ -239,6 +256,22 @@ const confirmDelete = () => {
                         </p>
 
                         <div class="flex flex-wrap gap-1">
+                            <AppBadge
+                                :variant="fitVariant(item.fit?.label)"
+                                :title="
+                                    item.fit?.score != null
+                                        ? `Score ${item.fit.score}`
+                                        : undefined
+                                "
+                            >
+                                {{ fitText(item.fit) }}
+                            </AppBadge>
+                            <AppBadge
+                                v-if="item.last_worn_on"
+                                variant="warning"
+                            >
+                                Worn {{ item.last_worn_on }}
+                            </AppBadge>
                             <AppBadge
                                 v-for="season in item.seasons"
                                 :key="season"

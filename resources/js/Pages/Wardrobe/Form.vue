@@ -1,6 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue';
+import axios from 'axios';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import AppAlert from '@/Components/UI/AppAlert.vue';
+import AppBadge from '@/Components/UI/AppBadge.vue';
 import AppButton from '@/Components/UI/AppButton.vue';
 import AppCard from '@/Components/UI/AppCard.vue';
 import AppCheckbox from '@/Components/UI/AppCheckbox.vue';
@@ -19,6 +22,10 @@ const props = defineProps({
     options: {
         type: Object,
         required: true,
+    },
+    aiConfigured: {
+        type: Boolean,
+        default: false,
     },
 });
 
@@ -63,19 +70,104 @@ const label = (value) =>
         .replaceAll('_', ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const fitVariant = (fitLabel) =>
+    ({
+        good_fit: 'success',
+        acceptable: 'info',
+        tight: 'warning',
+        loose: 'warning',
+        unknown: 'neutral',
+    })[fitLabel] ?? 'neutral';
+
 const toggle = (list, value) =>
     list.includes(value)
         ? list.filter((entry) => entry !== value)
         : [...list, value];
 
 const preview = ref(props.item?.photo_url ?? null);
+const analyzing = ref(false);
+const analyzeNote = ref(null);
+const analyzeError = ref(null);
+const galleryInput = ref(null);
+const cameraInput = ref(null);
 
-const onPhoto = (event) => {
-    const file = event.target.files?.[0] ?? null;
+const setPhotoFile = (file) => {
     form.photo = file;
+    analyzeNote.value = null;
+    analyzeError.value = null;
 
     if (file) {
         preview.value = URL.createObjectURL(file);
+    }
+};
+
+const onPhoto = (event) => {
+    const file = event.target.files?.[0] ?? null;
+    if (file) {
+        setPhotoFile(file);
+    }
+};
+
+const applySuggestions = (suggestions) => {
+    if (!suggestions) {
+        return;
+    }
+
+    const fields = [
+        'name',
+        'category',
+        'subcategory',
+        'primary_color_hex',
+        'secondary_color_hex',
+        'pattern',
+        'material',
+        'seasons',
+        'formality',
+        'fit_type',
+        'stretch',
+        'cut_tags',
+        'size_label',
+        'notes',
+    ];
+
+    fields.forEach((key) => {
+        if (suggestions[key] !== undefined && suggestions[key] !== null) {
+            form[key] = suggestions[key];
+        }
+    });
+
+    if (!suggestions.secondary_color_hex) {
+        form.secondary_color_hex = '';
+    }
+};
+
+const analyzePhoto = async () => {
+    if (!form.photo) {
+        analyzeError.value = 'Choose or take a photo first.';
+        return;
+    }
+
+    analyzing.value = true;
+    analyzeError.value = null;
+    analyzeNote.value = null;
+
+    const body = new FormData();
+    body.append('photo', form.photo);
+
+    try {
+        const { data } = await axios.post(route('wardrobe.analyze'), body, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        applySuggestions(data.suggestions);
+        analyzeNote.value = data.note || 'Suggestions applied. Review before saving.';
+    } catch (err) {
+        analyzeError.value =
+            err.response?.data?.message ||
+            err.response?.data?.errors?.photo?.[0] ||
+            'Could not analyse the photo. Try again or fill the form manually.';
+    } finally {
+        analyzing.value = false;
     }
 };
 
@@ -116,6 +208,115 @@ const submit = () => {
             </PageHeader>
 
             <form class="space-y-4" @submit.prevent="submit">
+                <AppCard :padded="false">
+                    <template #header>
+                        <div>
+                            <h2 class="text-base font-semibold text-text">
+                                Photo
+                            </h2>
+                            <p class="mt-0.5 text-sm text-text-muted">
+                                Take or import a photo, then analyse it to
+                                prefill colours and garment details.
+                            </p>
+                        </div>
+                    </template>
+
+                    <div class="space-y-4 p-5">
+                        <div class="grid gap-5 sm:grid-cols-2">
+                            <div class="space-y-3">
+                                <input
+                                    ref="galleryInput"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    class="hidden"
+                                    @change="onPhoto"
+                                />
+                                <input
+                                    ref="cameraInput"
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    capture="environment"
+                                    class="hidden"
+                                    @change="onPhoto"
+                                />
+
+                                <div class="flex flex-wrap gap-2">
+                                    <AppButton
+                                        type="button"
+                                        variant="outline"
+                                        @click="cameraInput?.click()"
+                                    >
+                                        <AppIcon name="camera" class="h-4 w-4" />
+                                        Take photo
+                                    </AppButton>
+                                    <AppButton
+                                        type="button"
+                                        variant="outline"
+                                        @click="galleryInput?.click()"
+                                    >
+                                        <AppIcon name="plus" class="h-4 w-4" />
+                                        Import image
+                                    </AppButton>
+                                    <AppButton
+                                        type="button"
+                                        :loading="analyzing"
+                                        :disabled="!form.photo"
+                                        @click="analyzePhoto"
+                                    >
+                                        <AppIcon
+                                            name="sparkles"
+                                            class="h-4 w-4"
+                                        />
+                                        Analyse photo
+                                    </AppButton>
+                                </div>
+
+                                <p class="text-xs text-text-muted">
+                                    JPG, PNG or WebP, up to 5 MB.
+                                    <span v-if="aiConfigured">
+                                        AI suggestions are enabled.
+                                    </span>
+                                    <span v-else>
+                                        No AI key — colour sampling only. Set
+                                        AI_PROVIDER + key in .env for fuller
+                                        suggestions.
+                                    </span>
+                                </p>
+
+                                <p
+                                    v-if="form.errors.photo"
+                                    class="text-xs text-danger-600"
+                                >
+                                    {{ form.errors.photo }}
+                                </p>
+                            </div>
+
+                            <div class="flex items-start justify-center">
+                                <img
+                                    v-if="preview"
+                                    :src="preview"
+                                    alt="Photo preview"
+                                    class="h-40 w-40 rounded-card border border-border object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border-strong text-text-muted"
+                                >
+                                    <AppIcon name="camera" class="h-6 w-6" />
+                                    <span class="text-xs">No photo</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <AppAlert v-if="analyzeNote" variant="success">
+                            {{ analyzeNote }}
+                        </AppAlert>
+                        <AppAlert v-if="analyzeError" variant="danger">
+                            {{ analyzeError }}
+                        </AppAlert>
+                    </div>
+                </AppCard>
+
                 <AppCard :padded="false">
                     <template #header>
                         <h2 class="text-base font-semibold text-text">Basics</h2>
@@ -398,52 +599,71 @@ const submit = () => {
                     </div>
                 </AppCard>
 
-                <AppCard :padded="false">
+                <AppCard v-if="isEdit && item?.fit" :padded="false">
                     <template #header>
-                        <h2 class="text-base font-semibold text-text">Photo</h2>
+                        <div class="flex items-center justify-between gap-3">
+                            <div>
+                                <h2 class="text-base font-semibold text-text">
+                                    Fit breakdown
+                                </h2>
+                                <p class="mt-0.5 text-sm text-text-muted">
+                                    Compared against your current measurements.
+                                </p>
+                            </div>
+                            <AppBadge :variant="fitVariant(item.fit.label)">
+                                {{ label(item.fit.label) }}
+                            </AppBadge>
+                        </div>
                     </template>
 
-                    <div class="grid gap-5 p-5 sm:grid-cols-2">
-                        <div>
-                            <label
-                                for="photo"
-                                class="mb-1 block text-sm font-medium text-text-secondary"
-                            >
-                                Image
-                            </label>
-                            <input
-                                id="photo"
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                class="block w-full text-sm text-text-muted file:me-3 file:h-9 file:rounded-control file:border-0 file:bg-surface-muted file:px-3 file:text-sm file:font-medium file:text-text-secondary hover:file:bg-border"
-                                @change="onPhoto"
-                            />
-                            <p class="mt-1 text-xs text-text-muted">
-                                JPG, PNG or WebP, up to 5 MB.
-                            </p>
-                            <p
-                                v-if="form.errors.photo"
-                                class="mt-1 text-xs text-danger-600"
-                            >
-                                {{ form.errors.photo }}
-                            </p>
-                        </div>
+                    <div class="space-y-3 p-5">
+                        <p
+                            v-if="item.fit.label === 'unknown'"
+                            class="text-sm text-text-muted"
+                        >
+                            Add garment measurements for a precise fit.
+                        </p>
 
-                        <div class="flex items-start justify-center">
-                            <img
-                                v-if="preview"
-                                :src="preview"
-                                alt="Photo preview"
-                                class="h-40 w-40 rounded-card border border-border object-cover"
-                            />
-                            <div
-                                v-else
-                                class="flex h-40 w-40 flex-col items-center justify-center gap-2 rounded-card border border-dashed border-border-strong text-text-muted"
+                        <p
+                            v-else-if="item.fit.score != null"
+                            class="text-sm text-text-secondary"
+                        >
+                            Fit score
+                            <span class="font-semibold tabular-nums text-text">
+                                {{ item.fit.score }}
+                            </span>
+                        </p>
+
+                        <ul
+                            v-if="item.fit.eases?.length"
+                            class="divide-y divide-border rounded-control border border-border"
+                        >
+                            <li
+                                v-for="ease in item.fit.eases"
+                                :key="ease.pair"
+                                class="flex items-center justify-between gap-3 px-3 py-2 text-sm"
                             >
-                                <AppIcon name="camera" class="h-6 w-6" />
-                                <span class="text-xs">No photo</span>
-                            </div>
-                        </div>
+                                <span class="text-text-secondary">
+                                    {{ label(ease.pair) }}
+                                </span>
+                                <span class="flex items-center gap-2">
+                                    <span
+                                        class="tabular-nums text-text-muted"
+                                    >
+                                        {{
+                                            ease.ease == null
+                                                ? '—'
+                                                : `${ease.ease > 0 ? '+' : ''}${ease.ease} cm`
+                                        }}
+                                    </span>
+                                    <AppBadge
+                                        :variant="fitVariant(ease.label)"
+                                    >
+                                        {{ label(ease.label) }}
+                                    </AppBadge>
+                                </span>
+                            </li>
+                        </ul>
                     </div>
                 </AppCard>
 

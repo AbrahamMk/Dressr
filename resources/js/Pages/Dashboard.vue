@@ -17,6 +17,10 @@ defineProps({
         type: Number,
         default: 0,
     },
+    bodyShape: {
+        type: Object,
+        default: null,
+    },
 });
 
 const rows = (measurement) => [
@@ -137,6 +141,25 @@ const shortcuts = [
                 </AppCard>
 
                 <div class="space-y-4">
+                    <AppCard>
+                        <p
+                            class="text-xs uppercase tracking-wide text-text-muted"
+                        >
+                            Body shape
+                        </p>
+                        <template v-if="bodyShape?.shape">
+                            <p class="mt-2 text-xl font-semibold text-text">
+                                {{ bodyShape.label }}
+                            </p>
+                            <p class="mt-2 text-sm text-text-muted">
+                                {{ bodyShape.explanation }}
+                            </p>
+                        </template>
+                        <p v-else class="mt-2 text-sm text-text-muted">
+                            Add chest, waist and hips to see your shape label.
+                        </p>
+                    </AppCard>
+
                     <AppCard>
                         <p
                             class="text-xs uppercase tracking-wide text-text-muted"

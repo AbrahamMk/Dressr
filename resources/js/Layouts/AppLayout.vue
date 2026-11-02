@@ -5,6 +5,7 @@ import ApplicationLogo from '@/Components/ApplicationLogo.vue';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
 import AppIcon from '@/Components/UI/AppIcon.vue';
+import InstallPrompt from '@/Components/UI/InstallPrompt.vue';
 import ToastContainer from '@/Components/UI/ToastContainer.vue';
 import { navigation } from '@/Config/navigation.js';
 import { useToast } from '@/Composables/useToast.js';
@@ -231,5 +232,6 @@ watch(
         </div>
 
         <ToastContainer />
+        <InstallPrompt />
     </div>
 </template>

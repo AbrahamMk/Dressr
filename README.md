@@ -1,66 +1,146 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Dressr
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Personal wardrobe, body-fit feedback, and rule-based outfit suggestions. Built with Laravel 12, Inertia.js, Vue 3, Tailwind, and MySQL. Targets **PHP 8.2**.
 
-## About Laravel
+## Local setup
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+1. Clone the repo and install PHP dependencies (platform locked to 8.2):
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+2. Configure MySQL in `.env` (`DB_*`). Create an empty database (default name in `.env.example` is `wardrobe`).
 
-## Learning Laravel
+3. Install front-end deps and build assets:
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+npm install
+npm run build
+# or for local Vite: npm run dev
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+4. Migrate (and optionally seed a demo wardrobe):
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+php artisan migrate
+php artisan db:seed
+php artisan storage:link
+```
 
-## Laravel Sponsors
+5. Serve:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+php artisan serve
+```
 
-### Premium Partners
+Demo login after seeding: `demo@dressr.test` / `password`.
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+## Environment variables
 
-## Contributing
+| Key | Purpose |
+|-----|---------|
+| `APP_NAME` | Shown in titles (Dressr) |
+| `DB_*` | MySQL connection |
+| `FILESYSTEM_DISK` | Usually `local`; photos use the `public` disk |
+| `AI_PROVIDER` | Optional Phase 5 — leave empty for rules only |
+| `AI_MODEL` | Optional free-tier model id |
+| `AI_DAILY_LIMIT` | Cap AI calls per user per day |
+| `AI_TIMEOUT` / `AI_CACHE_TTL` | AI HTTP behaviour |
+| `GEMINI_API_KEY` / `GROQ_API_KEY` / `OPENROUTER_API_KEY` | Provider secrets (never expose to the front end) |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Tunable fit, silhouette and scoring numbers live in `config/stylist.php` (not secrets).
 
-## Code of Conduct
+## Photo analysis (wardrobe)
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+On **Add / Edit item**, take or import a photo and tap **Analyse photo**.
 
-## Security Vulnerabilities
+- With `AI_PROVIDER` + API key: Gemini or OpenRouter vision suggests name, category, colours, pattern, seasons, etc.
+- Without a key: local colour sampling only (you still fill the rest).
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+AI_PROVIDER=gemini
+AI_MODEL=gemini-3.8-flash
+GEMINI_API_KEY=your_key_here
+```
 
-## License
+Or OpenRouter:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+AI_PROVIDER=openrouter
+AI_MODEL=google/gemini-3.8-flash
+OPENROUTER_API_KEY=your_key_here
+```
+
+If analysis says the model is unavailable, update `AI_MODEL` to whatever Google AI Studio currently lists as free Flash (often `gemini-3.8-flash`). A “busy / high demand” message means retry shortly — still free.
+
+Suggestions never auto-save — always review the form. Daily cap: `AI_DAILY_LIMIT`.
+
+## Switching AI provider
+
+1. Set `AI_PROVIDER` to `gemini` or `openrouter` (leave empty for local-only colour).
+2. Set `AI_MODEL` from that provider’s current docs.
+3. Put the key in the matching `*_API_KEY` env var.
+
+Never commit real keys. `.env` is gitignored. Outfit AI (Phase 5) is still optional/separate.
+
+## Tests and build
+
+```bash
+php artisan test
+npm run build
+```
+
+Production-ish PHP install check:
+
+```bash
+composer install --no-dev --optimize-autoloader
+```
+
+## Features (by phase)
+
+- Measurements + wardrobe CRUD with photos
+- Fit badges and body-shape silhouette
+- Rule-based outfit generator, save / favorite
+- Wear log calendar (variety penalty on generation)
+- Installable PWA (static asset cache only)
+
+## cPanel deployment checklist
+
+1. Upload the project (or git pull) outside the public web root if possible; point the domain/document root at `/public`.
+2. PHP version **8.2**. Enable `gd`, `mbstring`, `pdo_mysql`, `tokenizer`, `xml`, `ctype`, `json`, `fileinfo`, `openssl`.
+3. Copy `.env.example` → `.env`, set `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL`, and MySQL credentials. Run `php artisan key:generate` once.
+4. On the server (SSH or terminal):
+
+```bash
+composer install --no-dev --optimize-autoloader
+npm ci && npm run build
+php artisan migrate --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+5. **Storage link**
+
+```bash
+php artisan storage:link
+```
+
+If the host **blocks symlinks**, use a fallback instead of `storage:link`:
+
+- Create a real directory `public/storage`.
+- Either copy uploaded files from `storage/app/public` into `public/storage` on deploy, **or** change the `public` disk root in `config/filesystems.php` to `public_path('storage')` and ensure that folder is writable.
+- Keep `storage/app` and `bootstrap/cache` writable by the web user (`755`/`775` as your host requires).
+
+6. Schedule (optional): add a cron entry for `php artisan schedule:run` every minute if you use scheduled jobs later.
+7. Confirm `/up` health route responds, register/login works, and photo uploads land under the public storage path.
+8. Do **not** deploy `.env` via git; do **not** leave `APP_DEBUG=true` in production.
+
+## PWA notes
+
+- Manifest: `/manifest.webmanifest`
+- Service worker: `/sw.js` caches `/build/*` and icons only — never HTML or JSON API responses
+- Install prompt appears once and respects dismissal in `localStorage`
